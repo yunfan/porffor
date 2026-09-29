@@ -29,11 +29,23 @@ export const __Porffor_Generator_prototype_throw = function (this: __Porffor_Gen
 // async generators: same protocol but every step is async - next/return/throw return
 // promises and the produced value is itself awaited
 
-export const __Porffor_AsyncGenerator_step = (gen: __Porffor_AsyncGenerator, value: any, mode: i32): Promise => {
-  const promise: Promise = __Porffor_promise_create();
+// runs gen until it yields or ends, then settles promise. an await inside gen suspends
+// it too: send the awaited result back in and keep going
+export const __Porffor_AsyncGenerator_run = (gen: __Porffor_AsyncGenerator, value: any, mode: i32, promise: Promise): void => {
   try {
     const done: boolean = Porffor.coroutine.resume(gen, value, mode);
     const yielded: any = Porffor.coroutine.value(gen);
+    if (!done && Porffor.coroutine.awaiting(gen)) {
+      Porffor.callThis(__Promise_prototype_then, yielded,
+        (v: any): void => {
+          __Porffor_AsyncGenerator_run(gen, v, 0 as i32, promise);
+        },
+        (e: any): void => {
+          __Porffor_AsyncGenerator_run(gen, e, 1 as i32, promise);
+        });
+      return;
+    }
+
     if (Porffor.type(yielded) == Porffor.TYPES.promise) {
       // the yielded value is itself awaited: settle with { value: awaited, done }
       Porffor.callThis(__Promise_prototype_then, yielded,
@@ -56,6 +68,11 @@ export const __Porffor_AsyncGenerator_step = (gen: __Porffor_AsyncGenerator, val
   } catch (e) {
     __Porffor_promise_reject(e, promise);
   }
+};
+
+export const __Porffor_AsyncGenerator_step = (gen: __Porffor_AsyncGenerator, value: any, mode: i32): Promise => {
+  const promise: Promise = __Porffor_promise_create();
+  __Porffor_AsyncGenerator_run(gen, value, mode, promise);
   return promise;
 };
 

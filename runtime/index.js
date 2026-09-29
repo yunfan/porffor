@@ -28,6 +28,8 @@ const help = () => {
     [ '', 34, 'foo.js', 'Run a script' ],
     [ 'c', 94, 'foo.js -o foo.c', 'Compile to C source code' ],
     [ 'native', 94, 'foo.js -o foo', 'Compile to a native binary' ],
+    [ 'wasm', 94, 'foo.js -o foo.wasm', 'Compile to wasm (wasi + wasm-coro)' ],
+    [ '', 34, 'foo.wasm', 'Run a compiled wasm file' ],
   ]) {
     if (cmd.length > 0) post = ' ' + post;
 
@@ -55,6 +57,8 @@ const help = () => {
       'fast-length': 'Non-compliant optimization to make .length faster',
       'profile-compiler': 'Log general compiler performance (on by default when compiling to a file)',
       'jN': 'Parallel C compile jobs for module builds (default: CPU count)',
+      'wasi-sdk': 'wasi-sdk path for the wasm target (default: $WASI_SDK_PATH)',
+      'wasm-heap': 'Wasm heap size in MB (default: 1024)',
     })) {
       flag = '-' + flag;
       if (flag.length > 3) flag = '-' + flag;
@@ -97,7 +101,14 @@ entrypoint: {
   let tmpRunDir;
   if (inputFile === 'help') help();
 
-  if (['native', 'c'].includes(inputFile)) {
+  // run a wasm file built by `porf wasm`, with the wasi + wasm-coro host
+  if (inputFile?.endsWith('.wasm') && fs.existsSync(inputFile)) {
+    const { runWasm } = await import('../wasm-coro/run.mjs');
+    process.exitCode = await runWasm(fs.readFileSync(inputFile), nonFlagArgs.slice(1), inputFile);
+    break entrypoint;
+  }
+
+  if (['native', 'c', 'wasm'].includes(inputFile)) {
     command = inputFile;
     inputFile = globalThis.file = nonFlagArgs[1];
   }
@@ -115,7 +126,7 @@ entrypoint: {
   }
 
   if (command) {
-    if (['native', 'c'].includes(command)) Prefs.target = command;
+    if (['native', 'c', 'wasm'].includes(command)) Prefs.target = command;
   }
 
   let source = '';

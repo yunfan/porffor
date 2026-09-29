@@ -1865,8 +1865,8 @@ const generateCall = (scope, decl) => {
   }
   if (name === '__Porffor_malloc') return generateMallocIntrinsic(scope, decl.arguments, decl._porfMallocType ?? 0);
 
-  if (name === '__Porffor_coroutine_resume' || name === '__Porffor_coroutine_value')
-    return Call(name, decl.arguments.map(a => generate(scope, a)), name === '__Porffor_coroutine_resume' ? T.i32 : T.jsval);
+  if (name === '__Porffor_coroutine_resume' || name === '__Porffor_coroutine_value' || name === '__Porffor_coroutine_awaiting' || name === '__Porffor_coroutine_resume_async')
+    return Call(name, decl.arguments.map(a => generate(scope, a)), name === '__Porffor_coroutine_value' ? T.jsval : T.i32);
 
   // eval('known/literal string') -> inline the parsed program
   if (!decl._funcIdx && !decl._new && (name === 'eval' || (decl.callee.type === 'SequenceExpression' && decl.callee.expressions.at(-1)?.name === 'eval'))) {
@@ -3537,7 +3537,7 @@ const generateForOf = (scope, decl) => {
 
       [ TYPES.__porffor_asyncgenerator, () => {
         if (!isAwait) { stmt(scope, Unreachable()); return valUndefined(); }
-        const done = reuse(scope, Call('__Porffor_coroutine_resume', [ root, valUndefined(), Const(T.i32, 0) ], T.i32));
+        const done = reuse(scope, Call('__Porffor_coroutine_resume_async', [ root, valUndefined(), Const(T.i32, 0) ], T.i32));
         emitIf(scope, done, () => stmt(scope, Break(L)));
         return Call('__Porffor_coroutine_value', [ root ]);
       } ],

@@ -18,6 +18,8 @@ type PorfforGlobal = {
   coroutine: {
     resume(gen: any, value: any, mode: i32): boolean;
     value(gen: any): any;
+    awaiting(gen: any): boolean;         // suspended at an await, value() = pending promise
+    resume_async(gen: any, value: any, mode: i32): boolean; // resume, awaiting inner awaits
   }
 
   IR: {

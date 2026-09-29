@@ -24,6 +24,19 @@ Porffor is a 100% AOT compiled JS engine/runtime. There is nothing interpreted o
 - it avoids directly depending on a backend like LLVM or Cranelift
 - is easily modifiable post-compile for diverse environments
 
+## Wasm
+Porffor can also build a wasm32-wasi module, with real `async`/`await` and generators:
+
+```sh
+$ export WASI_SDK_PATH=/path/to/wasi-sdk   # https://github.com/WebAssembly/wasi-sdk
+$ porf wasm foo.js -o foo.wasm
+$ porf foo.wasm                            # runs it on node (>= 24)
+```
+
+Suspending needs a host that implements [wasm-coro](wasm-coro/SPEC.md), a tiny coroutine interface (4 imports). `porf foo.wasm` provides it on top of JSPI. Notes:
+- the module uses wasm exception handling (for `try`/`catch`)
+- there is no GC yet: the heap only grows, up to `--wasm-heap=MB` (default 1024)
+
 ## Versioning
 Porffor releases use a single increasing release number. Releases are automatically published every git push after CI testing.
 

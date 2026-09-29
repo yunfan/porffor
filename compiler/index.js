@@ -43,6 +43,8 @@ export default (code, module = Prefs.module, opts = {}) => {
   Prefs.module = module;
 
   let target = Prefs.target ?? 'c';
+  // the gc scans memory for roots, but wasm keeps most of them in locals it cannot see
+  if (target === 'wasm') Prefs.gc = false;
 
   let outFile = Prefs.o;
   const logProgress = !Prefs.quiet && (Prefs.profileCompiler || !!outFile);
@@ -95,6 +97,39 @@ export default (code, module = Prefs.module, opts = {}) => {
       if (!outFile) return;
       const detail = Prefs.nativeFetch ? 'C bundle' : split ? `${cOut.files.length} files` : formatSize(fs.statSync(outFile).size);
       console.log(`\u001b[2m[${formatTime(total)}]\u001b[0m \u001b[32mcompiled ${globalThis.file} \u001b[90m->\u001b[0m \u001b[92m${outFile}\u001b[90m (${detail})\u001b[0m`);
+    }
+
+    return;
+  }
+
+  if (target === 'wasm') {
+    outFile ??= file.split('/').at(-1).split('.')[0] + '.wasm';
+
+    // wasi-sdk: its clang and wasi-libc have working setjmp (via wasm exceptions)
+    const sdk = Prefs.wasiSdk ?? process.env.WASI_SDK_PATH ?? '/opt/wasi-sdk';
+    if (!fs.existsSync(`${sdk}/bin/clang`)) throw new Error(`wasm target needs wasi-sdk (https://github.com/WebAssembly/wasi-sdk), not found at ${sdk}. set WASI_SDK_PATH or --wasi-sdk=path`);
+
+    const emulated = [ 'signal', 'mman', 'process-clocks', 'getpid' ];
+    const args = [
+      `${sdk}/bin/clang`, '--target=wasm32-wasip1', `--sysroot=${sdk}/share/wasi-sysroot`,
+      '-xc', '-', '-w', `-O${Prefs.O ?? 3}`,
+      '-mexception-handling', '-mllvm', '-wasm-enable-sjlj',
+      ...emulated.map(x => `-D_WASI_EMULATED_${x.toUpperCase().replace('-', '_')}`),
+      '-Wl,-z,stack-size=1048576',
+      ...(Prefs.d ? [] : [ '-Wl,--strip-all' ]),
+      '-o', outFile,
+      '-lsetjmp', ...emulated.map(x => `-lwasi-emulated-${x}`)
+    ];
+
+    if (logProgress) progressStart(`compiling C to wasm (using ${args[0]})...`);
+    const t5 = performance.now();
+    execSync(args.join(' '), { stdio: [ 'pipe', 'inherit', 'inherit' ], input: c, encoding: 'utf8' });
+    if (logProgress) progressDone(`compiled C to wasm`, t5);
+
+    if (logProgress) {
+      const total = performance.now();
+      progressClear();
+      console.log(`\u001b[2m[${formatTime(total)}]\u001b[0m \u001b[32mcompiled ${globalThis.file} \u001b[90m->\u001b[0m \u001b[92m${outFile}\u001b[90m (${formatSize(fs.statSync(outFile).size)})\u001b[0m`);
     }
 
     return;
